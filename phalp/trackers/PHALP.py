@@ -13,7 +13,7 @@ import torch.nn as nn
 from detectron2 import model_zoo
 from detectron2.config import get_cfg
 from detectron2.structures import Boxes, Instances
-from hmr2.datasets.utils import expand_bbox_to_aspect_ratio
+# from hmr2.datasets.utils import expand_bbox_to_aspect_ratio
 from pycocotools import mask as mask_utils
 from scenedetect import AdaptiveDetector, detect
 from sklearn.linear_model import Ridge
@@ -48,28 +48,28 @@ class PHALP(nn.Module):
 
         # download wights and configs from Google Drive
         self.cached_download_from_drive()
-        
+
         # setup HMR, and pose_predictor. Override this function to use your own model
         self.setup_hmr()
 
         # setup temporal pose predictor
         self.setup_predictor()
-        
+
         # setup Detectron2, override this function to use your own model
         self.setup_detectron2()
-        
+
         # create a visualizer
         self.setup_visualizer()
-        
+
         # move to device
         self.to(self.device)
-        
+
         # train or eval
         self.train() if(self.cfg.train) else self.eval()
-        
+
         # create nessary directories
         self.default_setup()
-        
+
     def setup_hmr(self):
         log.info("Loading HMAR model...")
         self.HMAR = HMAR(self.cfg)
@@ -79,7 +79,7 @@ class PHALP(nn.Module):
         log.info("Loading Predictor model...")
         self.pose_predictor = Pose_transformer_v2(self.cfg, self)
         self.pose_predictor.load_weights(self.cfg.pose_predictor.weights_path)
-        
+
     def setup_detectron2(self):
         log.info("Loading Detection model...")
         if self.cfg.phalp.detector == 'maskrcnn':
@@ -98,30 +98,30 @@ class PHALP(nn.Module):
                 self.detectron2_cfg.model.roi_heads.box_predictors[i].test_score_thresh = 0.5
             self.detector = DefaultPredictor_Lazy(self.detectron2_cfg)
         else:
-            raise ValueError(f"Detector {self.cfg.phalp.detector} not supported")        
+            raise ValueError(f"Detector {self.cfg.phalp.detector} not supported")
 
         # for predicting masks with only bounding boxes, e.g. for running on ground truth tracks
         self.setup_detectron2_with_RPN()
         # TODO: make this work with DefaultPredictor_Lazy
-        
+
     def setup_detectron2_with_RPN(self):
         self.detectron2_cfg = get_cfg()
-        self.detectron2_cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml"))   
+        self.detectron2_cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml"))
         self.detectron2_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5
         self.detectron2_cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST   = 0.4
         self.detectron2_cfg.MODEL.WEIGHTS   = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml")
         self.detectron2_cfg.MODEL.META_ARCHITECTURE =  "GeneralizedRCNN_with_proposals"
         self.detector_x = DefaultPredictor_with_RPN(self.detectron2_cfg)
-        
+
     def setup_deepsort(self):
         log.info("Setting up DeepSort...")
         metric  = nn_matching.NearestNeighborDistanceMetric(self.cfg, self.cfg.phalp.hungarian_th, self.cfg.phalp.past_lookback)
-        self.tracker = Tracker(self.cfg, metric, max_age=self.cfg.phalp.max_age_track, n_init=self.cfg.phalp.n_init, phalp_tracker=self, dims=[4096, 4096, 99])  
-        
+        self.tracker = Tracker(self.cfg, metric, max_age=self.cfg.phalp.max_age_track, n_init=self.cfg.phalp.n_init, phalp_tracker=self, dims=[4096, 4096, 99])
+
     def setup_visualizer(self):
         log.info("Setting up Visualizer...")
         self.visualizer = Visualizer(self.cfg, self.HMAR)
-    
+
     def setup_postprocessor(self):
         # by default this will not be initialized
         self.postprocessor = Postprocessor(self.cfg, self)
@@ -129,15 +129,15 @@ class PHALP(nn.Module):
     def default_setup(self):
         # create subfolders for saving additional results
         try:
-            os.makedirs(self.cfg.video.output_dir + '/results', exist_ok=True)  
-            os.makedirs(self.cfg.video.output_dir + '/results_tracks', exist_ok=True)  
-            os.makedirs(self.cfg.video.output_dir + '/_TMP', exist_ok=True)  
-            os.makedirs(self.cfg.video.output_dir + '/_DEMO', exist_ok=True)  
-        except: 
+            os.makedirs(self.cfg.video.output_dir + '/results', exist_ok=True)
+            os.makedirs(self.cfg.video.output_dir + '/results_tracks', exist_ok=True)
+            os.makedirs(self.cfg.video.output_dir + '/_TMP', exist_ok=True)
+            os.makedirs(self.cfg.video.output_dir + '/_DEMO', exist_ok=True)
+        except:
             pass
-        
+
     def track(self):
-        
+
         eval_keys       = ['tracked_ids', 'tracked_bbox', 'tid', 'bbox', 'tracked_time']
         history_keys    = ['appe', 'loca', 'pose', 'uv'] if self.cfg.render.enable else []
         prediction_keys = ['prediction_uv', 'prediction_pose', 'prediction_loca'] if self.cfg.render.enable else []
@@ -146,7 +146,7 @@ class PHALP(nn.Module):
         history_keys    = history_keys + extra_keys_1 + extra_keys_2
         visual_store_   = eval_keys + history_keys + prediction_keys
         tmp_keys_       = ['uv', 'prediction_uv', 'prediction_pose', 'prediction_loca']
-        
+
         # process the source video and return a list of frames
         # source can be a video file, a youtube link or a image folder
         io_data = self.io_manager.get_frames_from_source()
@@ -154,30 +154,30 @@ class PHALP(nn.Module):
         self.cfg.video_seq = io_data['video_name']
         pkl_path = self.cfg.video.output_dir + '/results/' + self.cfg.track_dataset + "_" + str(self.cfg.video_seq) + '.pkl'
         video_path = self.cfg.video.output_dir + '/' + self.cfg.base_tracker + '_' + str(self.cfg.video_seq) + '.mp4'
-        
-        # check if the video is already processed                                  
-        if(not(self.cfg.overwrite) and os.path.isfile(pkl_path)): 
+
+        # check if the video is already processed
+        if(not(self.cfg.overwrite) and os.path.isfile(pkl_path)):
             return 0
-        
+
         # eval mode
         self.eval()
-        
+
         # setup rendering, deep sort and directory structure
         self.setup_deepsort()
         self.default_setup()
-        
+
         log.info("Saving tracks at : " + self.cfg.video.output_dir + '/results/' + str(self.cfg.video_seq))
-        
-        try: 
-            
+
+        try:
+
             list_of_frames = list_of_frames if self.cfg.phalp.start_frame==-1 else list_of_frames[self.cfg.phalp.start_frame:self.cfg.phalp.end_frame]
             list_of_shots = self.get_list_of_shots(list_of_frames)
-            
+
             tracked_frames = []
             final_visuals_dic = {}
-            
+
             for t_, frame_name in progress_bar(enumerate(list_of_frames), description="Tracking : " + self.cfg.video_seq, total=len(list_of_frames), disable=False):
-                
+
                 image_frame               = self.io_manager.read_frame(frame_name)
                 img_height, img_width, _  = image_frame.shape
                 new_image_size            = max(img_height, img_width)
@@ -190,13 +190,13 @@ class PHALP(nn.Module):
                     # TODO: add a flag for full resolution rendering
                     self.cfg.render.up_scale = int(self.cfg.render.output_resolution / self.cfg.render.res)
                     self.visualizer.reset_render(self.cfg.render.res*self.cfg.render.up_scale)
-                
+
                 ############ detection ##############
                 pred_bbox, pred_bbox_pad, pred_masks, pred_scores, pred_classes, gt_tids, gt_annots = self.get_detections(image_frame, frame_name, t_, additional_data, measurments)
 
                 ############ Run EXTRA models to attach to the detections ##############
                 extra_data = self.run_additional_models(image_frame, pred_bbox, pred_masks, pred_scores, pred_classes, frame_name, t_, measurments, gt_tids, gt_annots)
-                
+
                 ############ HMAR ##############
                 detections = self.get_human_features(image_frame, pred_masks, pred_bbox, pred_bbox_pad, pred_scores, frame_name, pred_classes, t_, measurments, gt_tids, gt_annots, extra_data)
 
@@ -208,12 +208,12 @@ class PHALP(nn.Module):
                 final_visuals_dic.setdefault(frame_name, {'time': t_, 'shot': self.cfg.phalp.shot, 'frame_path': frame_name})
                 if(self.cfg.render.enable): final_visuals_dic[frame_name]['frame'] = image_frame
                 for key_ in visual_store_: final_visuals_dic[frame_name][key_] = []
-                
+
                 ############ record the track states (history and predictions) ##############
                 for tracks_ in self.tracker.tracks:
                     if(frame_name not in tracked_frames): tracked_frames.append(frame_name)
                     if(not(tracks_.is_confirmed())): continue
-                    
+
                     track_id        = tracks_.track_id
                     track_data_hist = tracks_.track_data['history'][-1]
                     track_data_pred = tracks_.track_data['prediction']
@@ -228,7 +228,7 @@ class PHALP(nn.Module):
                     if(tracks_.time_since_update==0):
                         final_visuals_dic[frame_name]['tracked_ids'].append(track_id)
                         final_visuals_dic[frame_name]['tracked_bbox'].append(track_data_hist['bbox'])
-                        
+
                         if(tracks_.hits==self.cfg.phalp.n_init):
                             for pt in range(self.cfg.phalp.n_init-1):
                                 track_data_hist_ = tracks_.track_data['history'][-2-pt]
@@ -244,39 +244,39 @@ class PHALP(nn.Module):
                                 for pkey_ in prediction_keys: final_visuals_dic[frame_name_][pkey_].append(track_data_pred_[pkey_.split('_')[1]][-1])
 
                 ############ save the video ##############
-                if(self.cfg.render.enable and t_>=self.cfg.phalp.n_init):                    
+                if(self.cfg.render.enable and t_>=self.cfg.phalp.n_init):
                     d_ = self.cfg.phalp.n_init+1 if(t_+1==len(list_of_frames)) else 1
                     for t__ in range(t_, t_+d_):
 
                         frame_key = list_of_frames[t__-self.cfg.phalp.n_init]
-                        rendered_, f_size = self.visualizer.render_video(final_visuals_dic[frame_key])      
+                        rendered_, f_size = self.visualizer.render_video(final_visuals_dic[frame_key])
 
                         # save the rendered frame
                         self.io_manager.save_video(video_path, rendered_, f_size, t=t__-self.cfg.phalp.n_init)
 
                         # delete the frame after rendering it
                         del final_visuals_dic[frame_key]['frame']
-                        
+
                         # delete unnecessary keys
-                        for tkey_ in tmp_keys_:  
-                            del final_visuals_dic[frame_key][tkey_] 
+                        for tkey_ in tmp_keys_:
+                            del final_visuals_dic[frame_key][tkey_]
 
             joblib.dump(final_visuals_dic, pkl_path, compress=3)
             self.io_manager.close_video()
             if(self.cfg.use_gt): joblib.dump(self.tracker.tracked_cost, self.cfg.video.output_dir + '/results/' + str(self.cfg.video_seq) + '_' + str(self.cfg.phalp.start_frame) + '_distance.pkl')
-            
+
             return final_visuals_dic, pkl_path
-            
-        except Exception as e: 
+
+        except Exception as e:
             print(e)
-            print(traceback.format_exc())         
+            print(traceback.format_exc())
 
     def get_detections(self, image, frame_name, t_, additional_data=None, measurments=None):
-        
+
         if(frame_name in additional_data.keys()):
-            
+
             img_height, img_width, new_image_size, left, top = measurments
-            
+
             gt_bbox = additional_data[frame_name]["gt_bbox"]
             if(len(additional_data[frame_name]["extra_data"]['gt_track_id']) > 0):
                 ground_truth_track_id = additional_data[frame_name]["extra_data"]['gt_track_id']
@@ -287,13 +287,13 @@ class PHALP(nn.Module):
                 ground_truth_annotations = additional_data[frame_name]["extra_data"]['gt_class']
             else:
                 ground_truth_annotations = [[] for i in range(len(gt_bbox))]
-                
+
             inst = Instances((img_height, img_width))
             bbox_array   = []
             class_array  = []
             scores_array = []
 
-            # for ava bbox format  
+            # for ava bbox format
             # for bbox_ in gt_bbox:
             #     x1 = bbox_[0] * img_width
             #     y1 = bbox_[1] * img_height
@@ -310,25 +310,25 @@ class PHALP(nn.Module):
                 bbox_array.append([x1, y1, x2, y2])
                 class_array.append(0)
                 scores_array.append(1)
-                    
+
             bbox_array          = np.array(bbox_array)
             class_array         = np.array(class_array)
             box                 = Boxes(torch.as_tensor(bbox_array))
             inst.pred_boxes     = box
             inst.pred_classes   = torch.as_tensor(class_array)
             inst.scores         = torch.as_tensor(scores_array)
-            
-            outputs_x           = self.detector_x.predict_with_bbox(image, inst)                 
+
+            outputs_x           = self.detector_x.predict_with_bbox(image, inst)
             instances_x         = outputs_x['instances']
             instances_people    = instances_x[instances_x.pred_classes==0]
-            
+
             pred_bbox   = instances_people.pred_boxes.tensor.cpu().numpy()
             pred_masks  = instances_people.pred_masks.cpu().numpy()
             pred_scores = instances_people.scores.cpu().numpy()
             pred_classes= instances_people.pred_classes.cpu().numpy()
-                                    
+
         else:
-            outputs     = self.detector(image)   
+            outputs     = self.detector(image)
             instances   = outputs['instances']
             instances   = instances[instances.pred_classes==0]
             instances   = instances[instances.scores>self.cfg.phalp.low_th_c]
@@ -337,26 +337,26 @@ class PHALP(nn.Module):
             pred_masks  = instances.pred_masks.cpu().numpy()
             pred_scores = instances.scores.cpu().numpy()
             pred_classes= instances.pred_classes.cpu().numpy()
-            
+
             ground_truth_track_id = [1 for i in list(range(len(pred_scores)))]
             ground_truth_annotations = [[] for i in list(range(len(pred_scores)))]
 
         return pred_bbox, pred_bbox, pred_masks, pred_scores, pred_classes, ground_truth_track_id, ground_truth_annotations
 
     def get_croped_image(self, image, bbox, bbox_pad, seg_mask):
-        
+
         # Encode the mask for storing, borrowed from tao dataset
         # https://github.com/TAO-Dataset/tao/blob/master/scripts/detectors/detectron2_infer.py
         masks_decoded = np.array(np.expand_dims(seg_mask, 2), order='F', dtype=np.uint8)
         rles = mask_utils.encode(masks_decoded)
-        for rle in rles: 
+        for rle in rles:
             rle["counts"] = rle["counts"].decode("utf-8")
-            
+
         seg_mask = seg_mask.astype(int)*255
         if(len(seg_mask.shape)==2):
             seg_mask = np.expand_dims(seg_mask, 2)
             seg_mask = np.repeat(seg_mask, 3, 2)
-        
+
         center_      = np.array([(bbox[2] + bbox[0])/2, (bbox[3] + bbox[1])/2])
         scale_       = np.array([(bbox[2] - bbox[0]), (bbox[3] - bbox[1])])
 
@@ -370,11 +370,11 @@ class PHALP(nn.Module):
         # scale_x      = np.array([(bbox_[2] - bbox_[0]), (bbox_[3] - bbox_[1])])
         # mask_tmp     = process_mask(seg_mask.astype(np.uint8), center_x, 1.0*np.max(scale_x))
         # image_tmp    = process_image(image, center_x, 1.0*np.max(scale_x))
-        
+
         masked_image = torch.cat((image_tmp, mask_tmp[:1, :, :]), 0)
-        
+
         return masked_image, center_, scale_, rles, center_pad, scale_pad
-    
+
     def run_additional_models(self, image_frame, pred_bbox, pred_masks, pred_scores, pred_classes, frame_name, t_, measurments, gt_tids, gt_annots):
         return list(range(len(pred_scores)))
 
@@ -383,7 +383,7 @@ class PHALP(nn.Module):
 
         if(NPEOPLE==0): return []
 
-        img_height, img_width, new_image_size, left, top = measurments                
+        img_height, img_width, new_image_size, left, top = measurments
         ratio = 1.0/int(new_image_size)*self.cfg.render.res
         masked_image_list = []
         center_list = []
@@ -399,15 +399,15 @@ class PHALP(nn.Module):
             scale_list.append(scale_pad)
             rles_list.append(rles)
             selected_ids.append(p_)
-        
+
         if(len(masked_image_list)==0): return []
 
         masked_image_list = torch.stack(masked_image_list, dim=0)
         BS = masked_image_list.size(0)
-        
+
         with torch.no_grad():
             extra_args      = {}
-            hmar_out        = self.HMAR(masked_image_list.cuda(), **extra_args) 
+            hmar_out        = self.HMAR(masked_image_list.cuda(), **extra_args)
             uv_vector       = hmar_out['uv_vector']
             appe_embedding  = self.HMAR.autoencoder_hmar(uv_vector, en=True)
             appe_embedding  = appe_embedding.view(appe_embedding.shape[0], -1)
@@ -416,7 +416,7 @@ class PHALP(nn.Module):
                                                                                                img_size=self.cfg.render.res,
                                                                                                scale=np.max(np.array(scale_list), axis=1, keepdims=True)*ratio)
             pred_smpl_params = [{k:v[i].cpu().numpy() for k,v in pred_smpl_params.items()} for i in range(BS)]
-            
+
             if(self.cfg.phalp.pose_distance=="joints"):
                 pose_embedding  = pred_joints.cpu().view(BS, -1)
             elif(self.cfg.phalp.pose_distance=="smpl"):
@@ -432,23 +432,23 @@ class PHALP(nn.Module):
             pred_joints_2d_.contiguous()
             pred_cam_.contiguous()
             loca_embedding  = torch.cat((pred_joints_2d_, pred_cam_, pred_cam_, pred_cam_), 1)
-        
+
         # keeping it here for legacy reasons (T3DP), but it is not used.
         full_embedding    = torch.cat((appe_embedding.cpu(), pose_embedding, loca_embedding.cpu()), 1)
-        
+
         detection_data_list = []
         for i, p_ in enumerate(selected_ids):
             detection_data = {
                                 "bbox"            : np.array([bbox[p_][0], bbox[p_][1], (bbox[p_][2] - bbox[p_][0]), (bbox[p_][3] - bbox[p_][1])]),
                                 "mask"            : rles_list[i],
-                                "conf"            : score[p_], 
-                                
-                                "appe"            : appe_embedding[i].cpu().numpy(), 
-                                "pose"            : pose_embedding[i].numpy(), 
-                                "loca"            : loca_embedding[i].cpu().numpy(), 
-                                "uv"              : uv_vector[i].cpu().numpy(), 
-                                
-                                "embedding"       : full_embedding[i], 
+                                "conf"            : score[p_],
+
+                                "appe"            : appe_embedding[i].cpu().numpy(),
+                                "pose"            : pose_embedding[i].numpy(),
+                                "loca"            : loca_embedding[i].cpu().numpy(),
+                                "uv"              : uv_vector[i].cpu().numpy(),
+
+                                "embedding"       : full_embedding[i],
                                 "center"          : center_list[i],
                                 "scale"           : scale_list[i],
                                 "smpl"            : pred_smpl_params[i],
@@ -469,27 +469,27 @@ class PHALP(nn.Module):
             detection_data_list.append(Detection(detection_data))
 
         return detection_data_list
-    
+
     def forward_for_tracking(self, vectors, attibute="A", time=1):
-        
+
         if(attibute=="P"):
 
             vectors_pose         = vectors[0]
             vectors_data         = vectors[1]
             vectors_time         = vectors[2]
-        
+
             en_pose              = torch.from_numpy(vectors_pose)
             en_data              = torch.from_numpy(vectors_data)
             en_time              = torch.from_numpy(vectors_time)
-            
+
             if(len(en_pose.shape)!=3):
                 en_pose          = en_pose.unsqueeze(0) # (BS, 7, pose_dim)
                 en_time          = en_time.unsqueeze(0) # (BS, 7)
                 en_data          = en_data.unsqueeze(0) # (BS, 7, 6)
-            
+
             with torch.no_grad():
                 pose_pred = self.pose_predictor.predict_next(en_pose, en_data, en_time, time)
-            
+
             return pose_pred.cpu()
 
 
@@ -504,10 +504,10 @@ class PHALP(nn.Module):
             time                 = torch.from_numpy(time)
 
             if(len(en_loca.shape)!=3):
-                en_loca          = en_loca.unsqueeze(0)             
-                en_time          = en_time.unsqueeze(0)             
+                en_loca          = en_loca.unsqueeze(0)
+                en_time          = en_time.unsqueeze(0)
             else:
-                en_loca          = en_loca.permute(0, 1, 2)         
+                en_loca          = en_loca.permute(0, 1, 2)
 
             BS = en_loca.size(0)
             t_ = en_loca.size(1)
@@ -555,11 +555,11 @@ class PHALP(nn.Module):
                 y_p_ = (y_p-0.5)*np.exp(n_p)/5000.0*256.0
                 y_hat = clf.predict(np.hstack((np.ones((t_.size, 1)), t_.reshape((-1, 1)))))
                 y_pi  = get_prediction_interval(y0_, y_hat, t_, time_+1+t_[-1])
-                
+
                 new_en_loca_n.append([x_p_, y_p_, np.exp(n_p), x_pi/loc_, y_pi/loc_, np.exp(n_pi)/loc_, 1, 1, 0])
                 en_loca_xy[bs, -1, 44, 0] = x_p
                 en_loca_xy[bs, -1, 44, 1] = y_p
-                
+
             new_en_loca_n        = torch.from_numpy(np.array(new_en_loca_n))
             xt                   = torch.cat((en_loca_xy[:, -1, :, :].view(BS, 90), (new_en_loca_n.float()).view(BS, 9)), 1)
 
@@ -570,11 +570,11 @@ class PHALP(nn.Module):
         d_uv         = torch.from_numpy(d_uv).cuda().float()
         d_mask       = d_uv[3:, :, :]>0.5
         t_mask       = t_uv[3:, :, :]>0.5
-        
+
         mask_dt      = torch.logical_and(d_mask, t_mask)
         mask_dt      = mask_dt.repeat(4, 1, 1)
         mask_        = torch.logical_not(mask_dt)
-        
+
         t_uv[mask_]  = 0.0
         d_uv[mask_]  = 0.0
 
@@ -586,7 +586,7 @@ class PHALP(nn.Module):
         return t_emb.cpu().numpy(), d_emb.cpu().numpy(), torch.sum(mask_dt).cpu().numpy()/4/256/256/2
 
     def get_pose_distance(self, track_pose, detect_pose):
-        """Compute pair-wise squared l2 distances between points in `track_pose` and `detect_pose`.""" 
+        """Compute pair-wise squared l2 distances between points in `track_pose` and `detect_pose`."""
         track_pose, detect_pose = np.asarray(track_pose), np.asarray(detect_pose)
 
         if(self.cfg.phalp.pose_distance=="smpl"):
@@ -612,7 +612,7 @@ class PHALP(nn.Module):
                 video_tmp_name   = self.cfg.video.output_dir + "/_TMP/" + str(self.cfg.video_seq) + ".mp4"
                 for ft_, fname_ in enumerate(list_of_frames):
                     im_ = cv2.imread(fname_)
-                    if(ft_==0): 
+                    if(ft_==0):
                         video_file = cv2.VideoWriter(video_tmp_name, cv2.VideoWriter_fourcc(*'mp4v'), 24, frameSize=(im_.shape[1], im_.shape[0]))
                     video_file.write(im_)
                 video_file.release()
@@ -621,7 +621,7 @@ class PHALP(nn.Module):
                 video_tmp_name = list_of_frames[0][0]
             else:
                 raise Exception("Unknown type of list_of_frames")
-            
+
             # Detect scenes in a video using PySceneDetect.
             scene_list = detect(video_tmp_name, AdaptiveDetector())
 
@@ -642,7 +642,7 @@ class PHALP(nn.Module):
         :param url: the URL of the file to download
         :param path: the path to save the file to
         """
-        
+
         os.makedirs(os.path.join(CACHE_DIR, "phalp"), exist_ok=True)
         os.makedirs(os.path.join(CACHE_DIR, "phalp/3D"), exist_ok=True)
         os.makedirs(os.path.join(CACHE_DIR, "phalp/weights"), exist_ok=True)
@@ -673,13 +673,13 @@ class PHALP(nn.Module):
             "hmar_v2_weights.pth"      : ["https://people.eecs.berkeley.edu/~jathushan/projects/phalp/weights/hmar_v2_weights.pth", os.path.join(CACHE_DIR, "phalp/weights")],
             "pose_predictor.pth"       : ["https://people.eecs.berkeley.edu/~jathushan/projects/phalp/weights/pose_predictor_40006.ckpt", os.path.join(CACHE_DIR, "phalp/weights")],
             "pose_predictor.yaml"      : ["https://people.eecs.berkeley.edu/~jathushan/projects/phalp/weights/config_40006.yaml", os.path.join(CACHE_DIR, "phalp/weights")],
-            
+
             # data for ava dataset
             "ava_labels.pkl"           : ["https://people.eecs.berkeley.edu/~jathushan/projects/phalp/ava/ava_labels.pkl", os.path.join(CACHE_DIR, "phalp/ava")],
             "ava_class_mapping.pkl"   : ["https://people.eecs.berkeley.edu/~jathushan/projects/phalp/ava/ava_class_mappping.pkl", os.path.join(CACHE_DIR, "phalp/ava")],
-    
+
         } | additional_urls # type: ignore
-        
+
         for file_name, url in download_files.items():
             if not os.path.exists(os.path.join(url[1], file_name)):
                 print("Downloading file: " + file_name)
