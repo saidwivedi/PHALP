@@ -31,6 +31,11 @@ pip install -e .[all]
 </details>
 <br>
 
+Download the SMPL neutral model from [official website](https://smpl.is.tue.mpg.de/) and place in cache directory.
+```
+cp SMPL_NEUTRAL.pkl $HOME/.cache/phalp/3D/models/smpl/
+```
+
 ## Demo
 
 To run our code on a video, please specifiy the input video `video.source` and an output directory `video.output_dir`:

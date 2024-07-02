@@ -644,21 +644,21 @@ class PHALP(nn.Module):
         """
 
         os.makedirs(os.path.join(CACHE_DIR, "phalp"), exist_ok=True)
-        os.makedirs(os.path.join(CACHE_DIR, "phalp/3D"), exist_ok=True)
+        os.makedirs(os.path.join(CACHE_DIR, "phalp/3D/models/smpl"), exist_ok=True)
         os.makedirs(os.path.join(CACHE_DIR, "phalp/weights"), exist_ok=True)
         os.makedirs(os.path.join(CACHE_DIR, "phalp/ava"), exist_ok=True)
 
-        smpl_path = os.path.join(CACHE_DIR, "phalp/3D/models/smpl/SMPL_NEUTRAL.pkl")
+        # smpl_path = os.path.join(CACHE_DIR, "phalp/3D/models/smpl/SMPL_NEUTRAL.pkl")
 
-        if not os.path.exists(smpl_path):
-            # We are downloading the SMPL model here for convenience. Please accept the license
-            # agreement on the SMPL website: https://smpl.is.tue.mpg.
-            os.makedirs(os.path.join(CACHE_DIR, "phalp/3D/models/smpl"), exist_ok=True)
-            os.system('wget https://github.com/classner/up/raw/master/models/3D/basicModel_neutral_lbs_10_207_0_v1.0.0.pkl')
+        # if not os.path.exists(smpl_path):
+        #     # We are downloading the SMPL model here for convenience. Please accept the license
+        #     # agreement on the SMPL website: https://smpl.is.tue.mpg.
+        #     os.makedirs(os.path.join(CACHE_DIR, "phalp/3D/models/smpl"), exist_ok=True)
+        #     os.system('wget https://github.com/classner/up/raw/master/models/3D/basicModel_neutral_lbs_10_207_0_v1.0.0.pkl')
 
-            convert_pkl('basicModel_neutral_lbs_10_207_0_v1.0.0.pkl')
-            os.system('rm basicModel_neutral_lbs_10_207_0_v1.0.0.pkl')
-            os.system('mv basicModel_neutral_lbs_10_207_0_v1.0.0_p3.pkl ' + smpl_path)
+        #     convert_pkl('basicModel_neutral_lbs_10_207_0_v1.0.0.pkl')
+        #     os.system('rm basicModel_neutral_lbs_10_207_0_v1.0.0.pkl')
+        #     os.system('mv basicModel_neutral_lbs_10_207_0_v1.0.0_p3.pkl ' + smpl_path)
 
         additional_urls = additional_urls if additional_urls is not None else {}
         download_files = {
